@@ -1,9 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+import re
 
 # === Load environment variables ===
 load_dotenv()
@@ -16,69 +17,78 @@ model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 # === FastAPI setup ===
 app = FastAPI()
 
-# === CORS for React Native / Expo ===
+# === CORS setup ===
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can change this to specific frontend origin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# === Memory store for chat history ===
+# === Chat history per user ===
 user_chat_history = {}
 
-# === Helper: Gemini Q&A with chat context ===
+# === Keywords to filter personal/non-agriculture questions ===
+PERSONAL_QUESTIONS = {
+    "who made you": "Suraj",
+    "who created you": "Suraj",
+    "your name": "Krishi Dev",
+    "what is your name": "Krishi Dev",
+}
+
+# === Helper: Check if question is related to agriculture ===
+def is_agriculture_question(text: str) -> bool:
+    ag_keywords = [
+        "crop", "soil", "fertilizer", "plant", "harvest", "irrigation",
+        "pesticide", "weather", "farm", "agriculture", "farming", "disease",
+        "yield", "manure", "spray", "weed", "insect", "seed", "land"
+    ]
+    return any(word in text.lower() for word in ag_keywords)
+
+# === Helper: Clean Gemini output ===
+def format_response(text: str) -> str:
+    lines = text.strip().split("\n")
+    short_answer = lines[0].strip() if lines else text.strip()
+    return f"{short_answer}\n\n🌿 Need more info? Ask your next question."
+
+# === Gemini-based Q&A ===
 def ask_gemini_with_context(user_id: int, question: str) -> str:
+    question_lower = question.lower()
+
+    # Personal / identity-based custom answers
+    for key, value in PERSONAL_QUESTIONS.items():
+        if key in question_lower:
+            return value
+
+    # Restrict to agriculture questions only
+    if not is_agriculture_question(question):
+        return "❌ I can only answer questions related to agriculture. Please ask something about farming, crops, or soil."
+
     try:
         if user_id not in user_chat_history:
             user_chat_history[user_id] = [
                 {
                     "role": "user",
-                    "parts": [{"text": "You are an agriculture expert. Help Indian farmers with short, clear advice."}]
+                    "parts": [{"text": "You are an agriculture expert. Give short, clear answers only about Indian farming. Never say you are an AI or Gemini. Ask if the user wants more details after each reply."}]
                 },
                 {
                     "role": "model",
-                    "parts": [{"text": "Understood. I will assist with agriculture-related help."}]
+                    "parts": [{"text": "Understood. I will give short, agriculture-only replies and suggest follow-up."}]
                 }
             ]
         user_chat_history[user_id].append({"role": "user", "parts": [{"text": question}]})
         chat = model.start_chat(history=user_chat_history[user_id])
         response = chat.send_message(question)
         user_chat_history[user_id].append({"role": "model", "parts": [{"text": response.text}]})
-        user_chat_history[user_id] = user_chat_history[user_id][-20:]  # Trim to last 20 messages
-        return response.text.strip()
+        user_chat_history[user_id] = user_chat_history[user_id][-20:]
+
+        return format_response(response.text)
+
     except Exception as e:
         return f"❌ Error: {e}"
 
-# === Helper: Analyze plant image with Gemini ===
-def analyze_image_with_gemini(image_path: str) -> str:
-    try:
-        with open(image_path, "rb") as img_file:
-            image_data = img_file.read()
-
-        prompt = (
-            "You are an agriculture expert helping Indian farmers.\n"
-            "Analyze the attached image of a plant. Detect any disease or nutrient deficiency.\n"
-            "Format the response like this:\n\n"
-            "🌱 Plant: [Plant Name or Unknown]\n"
-            "🦠 Disease: [Disease Name or 'Healthy']\n"
-            "⚠️ Precautions:\n- Bullet 1\n- Bullet 2\n"
-            "💊 Cure: [Steps to take]\n"
-            "🧪 Recommended Products: [Affordable Options]\n"
-        )
-
-        response = model.generate_content([
-            {"role": "user", "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": "image/jpeg", "data": image_data}}
-            ]}
-        ])
-        return response.text.strip()
-    except Exception as e:
-        return f"❌ Image analysis error: {e}"
-
-# === API Schemas ===
+# === Request Schema ===
 class AskRequest(BaseModel):
     user_id: int
     question: str
@@ -89,21 +99,6 @@ class AskRequest(BaseModel):
 async def ask_question(req: AskRequest):
     answer = ask_gemini_with_context(req.user_id, req.question)
     return {"answer": answer}
-
-@app.post("/analyze")
-async def analyze_image(
-    user_id: int = Form(...),  # Important: Accept user_id as form field
-    file: UploadFile = File(...)
-):
-    try:
-        save_path = f"/tmp/{user_id}_uploaded.jpg"
-        with open(save_path, "wb") as f:
-            f.write(await file.read())
-
-        result = analyze_image_with_gemini(save_path)
-        return {"result": result}
-    except Exception as e:
-        return {"result": f"❌ Server error: {e}"}
 
 @app.get("/")
 def root():
