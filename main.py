@@ -1,49 +1,47 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
-import os
 from dotenv import load_dotenv
+import os
+import google.generativeai as genai
+from db import save_chat_to_db, get_chats_from_db
 
-# === Load environment variables ===
+# Load environment variables
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# === Configure Gemini ===
+# Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
-# === FastAPI setup ===
 app = FastAPI()
 
-# === Enable CORS (for mobile / frontend) ===
+# CORS for frontend/mobile app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set specific domain in production
+    allow_origins=["*"],  # Replace "*" with your frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# === Store chat sessions ===
+# In-memory chat sessions
 user_chat_sessions = {}
 
-# === Data model for /ask ===
+# Request model
 class AskRequest(BaseModel):
-    user_id: int
+    user_id: str  # ✅ Changed from int to str
     question: str
 
-# === Main logic ===
-def ask_gemini_with_context(user_id: int, question: str) -> str:
+# Chat logic
+def ask_gemini_with_context(user_id: str, question: str) -> str:  # ✅ Changed user_id to str
     question_lower = question.lower()
 
-    # === Handle identity Qs ===
-    if "who made you" in question_lower or "who created you" in question_lower:
+    if "who made you" in question_lower:
         return "Suraj"
-    if "what is your name" in question_lower or "your name" in question_lower:
+    if "what is your name" in question_lower:
         return "Krishi Dev"
 
-    # === Start new chat if needed ===
     if user_id not in user_chat_sessions:
         system_instruction = (
             "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
@@ -59,7 +57,6 @@ def ask_gemini_with_context(user_id: int, question: str) -> str:
         ])
         user_chat_sessions[user_id] = chat
 
-    # === Continue chat with memory ===
     try:
         chat = user_chat_sessions[user_id]
         response = chat.send_message(question)
@@ -67,12 +64,18 @@ def ask_gemini_with_context(user_id: int, question: str) -> str:
     except Exception as e:
         return f"❌ Error: {e}"
 
-# === API endpoints ===
-@app.post("/ask")
-async def ask_question(req: AskRequest):
-    answer = ask_gemini_with_context(req.user_id, req.question)
-    return {"answer": answer}
+# === Routes ===
 
 @app.get("/")
 def root():
     return {"status": "✅ Krishi Dev backend is running."}
+
+@app.post("/ask")
+async def ask_question(req: AskRequest):
+    answer = ask_gemini_with_context(req.user_id, req.question)
+    await save_chat_to_db(req.user_id, req.question, answer)
+    return {"answer": answer}
+
+@app.get("/chats/{user_id}")
+async def get_chats(user_id: str):  # ✅ Changed from int to str
+    return await get_chats_from_db(user_id)
