@@ -49,7 +49,7 @@ async def get_chats_from_db(user_id: str):
     cursor = chats_collection.find({"user_id": user_id}).sort("timestamp", 1)
     chats = []
     async for chat in cursor:
-        if chat["type"] == "text":
+        if chat.get["type"] == "text":
             chats.append({
                 "type": "text",
                 "question": chat["question"],
