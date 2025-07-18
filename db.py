@@ -45,6 +45,7 @@ async def save_image_to_db(user_id: str, filename: str, base64_image: str, resul
     })
 
 
+
 # ---------------------- FETCH ALL CHATS ----------------------
 async def get_chats_from_db(user_id: str):
     """

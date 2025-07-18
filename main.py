@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import os
+import mimetypes
 import base64
 import traceback
 import google.generativeai as genai
@@ -100,8 +101,10 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         # Convert image to base64
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG")
-        img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        img_bytes = buffered.getvalue()
+        img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
+        # Prepare the prompt and input for the model
         prompt = (
             "You are a plant doctor. Analyze this plant photo and respond clearly.\n\n"
             "🌱 Plant: [name if you can identify]\n"
@@ -112,14 +115,26 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
             "End with: '🌿 Need more info? Ask your next question.'"
         )
 
-        # Ensure `model.generate_content` is defined and correct
-        response = model.generate_content([prompt, {"image_base64": img_base64}])
+        # Use correct format for Google Generative AI SDK
+        response = model.generate_content([
+            {"text": prompt},
+            {
+                "inline_data": {
+                    "mime_type": "image/jpeg",
+                    "data": img_base64
+                }
+            }
+        ])
         result = response.text.strip()
 
+        # Save to MongoDB
         await save_image_to_db(user_id, file.filename, img_base64, result)
 
-        return {"result": result or "❌ No analysis result. Try another image."}
-    
+        return {
+            "result": result or "❌ No analysis result. Try another image.",
+            "image_base64": img_base64
+        }
+
     except Exception as e:
         print("Error during /analyze-image/:", str(e))
         traceback.print_exc()
