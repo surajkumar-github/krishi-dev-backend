@@ -1,6 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 import os
+import base64
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -28,14 +29,18 @@ async def save_chat_to_db(user_id: str, question: str, response: str):
 
 # ---------------------- IMAGE CHAT ----------------------
 
-async def save_image_to_db(user_id: str, image_url: str, result: str):
+
+
+async def save_image_to_db(user_id: str, filename: str, image_bytes: bytes, result: str):
     """
-    Save an image message (with its analysis result) to the database.
+    Save image content as base64 string along with analysis result to MongoDB.
     """
+    base64_image = base64.b64encode(image_bytes).decode("utf-8")
     await chats_collection.insert_one({
         "user_id": user_id,
         "type": "image",
-        "image_url": image_url,
+        "filename": filename,
+        "image_base64": base64_image,
         "result": result,
         "timestamp": datetime.utcnow()
     })

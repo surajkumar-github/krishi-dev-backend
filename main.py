@@ -108,7 +108,8 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         response = model.generate_content([prompt, image])
         result = response.text.strip()
 
-        await save_image_to_db(user_id, file.filename, result)
+        await save_image_to_db(user_id, file.filename, contents, result)
+
 
         return {"result": result or "❌ No analysis result. Try another image."}
     except Exception as e:
