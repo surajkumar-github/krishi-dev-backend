@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import os
+import base64
 import google.generativeai as genai
 from db import save_chat_to_db, get_chats_from_db, save_image_to_db
 
@@ -95,6 +96,12 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         except Exception:
             return JSONResponse(status_code=400, content={"error": "Invalid image file"})
 
+        # Convert image to base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        img_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+        # Optional: You can use the base64 string in a prompt or elsewhere
         prompt = (
             "You are a plant doctor. Analyze this plant photo and respond clearly.\n\n"
             "🌱 Plant: [name if you can identify]\n"
@@ -105,12 +112,16 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
             "End with: '🌿 Need more info? Ask your next question.'"
         )
 
-        response = model.generate_content([prompt, image])
+        # Assuming `model.generate_content()` supports base64 image input (some APIs do)
+        response = model.generate_content([prompt, {"image_base64": img_base64}])
         result = response.text.strip()
 
-        await save_image_to_db(user_id, file.filename, contents, result)
+        await save_image_to_db(user_id, file.filename, img_base64, result)
 
 
-        return {"result": result or "❌ No analysis result. Try another image."}
+        return {
+            "result": result or "❌ No analysis result. Try another image.",
+            "image_base64": img_base64
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})

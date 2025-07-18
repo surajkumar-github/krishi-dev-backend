@@ -31,11 +31,10 @@ async def save_chat_to_db(user_id: str, question: str, response: str):
 
 
 
-async def save_image_to_db(user_id: str, filename: str, image_bytes: bytes, result: str):
+async def save_image_to_db(user_id: str, filename: str, base64_image: str, result: str):
     """
-    Save image content as base64 string along with analysis result to MongoDB.
+    Save base64-encoded image along with analysis result to MongoDB.
     """
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
     await chats_collection.insert_one({
         "user_id": user_id,
         "type": "image",
@@ -45,8 +44,8 @@ async def save_image_to_db(user_id: str, filename: str, image_bytes: bytes, resu
         "timestamp": datetime.utcnow()
     })
 
-# ---------------------- FETCH ALL CHATS ----------------------
 
+# ---------------------- FETCH ALL CHATS ----------------------
 async def get_chats_from_db(user_id: str):
     """
     Retrieve all chats for a user (text and image), sorted by time.
@@ -65,9 +64,11 @@ async def get_chats_from_db(user_id: str):
         elif chat_type == "image":
             chats.append({
                 "type": "image",
-                "image_url": chat.get("image_url"),
+                "filename": chat.get("filename"),
+                "image_base64": chat.get("image_base64"),
                 "result": chat.get("result"),
                 "timestamp": chat.get("timestamp")
             })
     return chats
+
 
