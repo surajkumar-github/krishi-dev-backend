@@ -89,7 +89,11 @@ async def get_chats(user_id: str):  # ✅ Changed from int to str
 async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            image = Image.open(io.BytesIO(contents)).convert("RGB")
+        except Exception:
+            return JSONResponse(status_code=400, content={"error": "Invalid image file"})
 
         prompt = (
             "You are a plant doctor. Analyze this plant photo and respond clearly.\n\n"
@@ -104,9 +108,8 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         response = model.generate_content([prompt, image])
         result = response.text.strip()
 
-        await save_image_to_db(user_id, file.filename, contents, result)
+        await save_image_to_db(user_id, file.filename, result)
 
         return {"result": result or "❌ No analysis result. Try another image."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
-
