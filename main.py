@@ -1,10 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from typing import List
 from dotenv import load_dotenv
+from PIL import Image
+import io
 import os
 import google.generativeai as genai
-from db import save_chat_to_db, get_chats_from_db
+from db import save_chat_to_db, get_chats_from_db, save_image_to_db
 
 # Load environment variables
 load_dotenv()
@@ -79,3 +83,30 @@ async def ask_question(req: AskRequest):
 @app.get("/chats/{user_id}")
 async def get_chats(user_id: str):  # ✅ Changed from int to str
     return await get_chats_from_db(user_id)
+
+# === Analyze Plant Image ===
+@app.post("/analyze-image/")
+async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+        image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        prompt = (
+            "You are a plant doctor. Analyze this plant photo and respond clearly.\n\n"
+            "🌱 Plant: [name if you can identify]\n"
+            "🦠 Disease: [or say Healthy]\n"
+            "⚠️ Issues: bullet list of symptoms\n"
+            "💊 Cure: what farmer should do\n"
+            "🧪 Products: common chemical/organic solutions (only if relevant)\n"
+            "End with: '🌿 Need more info? Ask your next question.'"
+        )
+
+        response = model.generate_content([prompt, image])
+        result = response.text.strip()
+
+        await save_image_to_db(user_id, file.filename, contents, result)
+
+        return {"result": result or "❌ No analysis result. Try another image."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
