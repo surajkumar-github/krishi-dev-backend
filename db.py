@@ -49,18 +49,20 @@ async def get_chats_from_db(user_id: str):
     cursor = chats_collection.find({"user_id": user_id}).sort("timestamp", 1)
     chats = []
     async for chat in cursor:
-        if chat.get["type"] == "text":
+        chat_type = chat.get("type")
+        if chat_type == "text":
             chats.append({
                 "type": "text",
-                "question": chat["question"],
-                "response": chat["response"],
+                "question": chat.get("question"),
+                "response": chat.get("response"),
                 "timestamp": chat.get("timestamp")
             })
-        elif chat["type"] == "image":
+        elif chat_type == "image":
             chats.append({
                 "type": "image",
-                "image_url": chat["image_url"],
-                "result": chat["result"],
+                "image_url": chat.get("image_url"),
+                "result": chat.get("result"),
                 "timestamp": chat.get("timestamp")
             })
     return chats
+
