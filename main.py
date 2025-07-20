@@ -88,10 +88,11 @@ async def get_chats(user_id: str):  # ✅ Changed from int to str
     return await get_chats_from_db(user_id)
 
 # === Analyze Plant Image ===
-@app.post("/analyze-image/")
+@@app.post("/analyze-image/")
 async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
+
         try:
             image = Image.open(io.BytesIO(contents)).convert("RGB")
         except Exception:
@@ -103,19 +104,35 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         img_bytes = buffered.getvalue()
         img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        # Prompt for image analysis
-        prompt = (
+        # Prepare system + prompt
+        system_instruction = (
             "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
-            "Analyze this plant image and reply in this exact format:\n\n"
-            "🌿 Plant Type: [Name the plant if you recognize it; otherwise say 'Uncertain']\n"
-            "🦠 Disease Status: [If diseased, name the disease like 'Powdery Mildew' or 'Leaf Curl Virus'. "
-            "If healthy, say 'Healthy'. If unsure, say 'Unclear']\n\n"
-            "Then ask: 'Do you want help with treatment, organic remedies, or fertilizers?'\n"
-    "👉 Keep the entire reply under 4 lines. Use bullet points if needed."
+            "Only answer questions about farming, crops, diseases, and organic remedies.\n"
+            "Do NOT answer non-agriculture topics like politics, celebrities, math, science, coding, GK, or English.\n"
+            "NEVER say you're AI or Google. Ignore unrelated questions.\n"
+            "KEEP ALL ANSWERS VERY SHORT (max 4 lines), use bullet points, no extra text.\n"
+            "End with: '🌿 Need more info? Ask your next question.'"
         )
 
-        # Image analysis
-        image_response = model.generate_content([
+        prompt = (
+            "Analyze this plant image and reply in this format:\n\n"
+            "🌿 Plant Type: [Tomato, Brinjal, etc]\n"
+            "🦠 Disease Status: [e.g. Healthy, Leaf Curl Virus, Powdery Mildew, Unclear]\n"
+            "✅ Then ask: 'Do you want help with treatment, organic cure, or fertilizer suggestions?'\n"
+            "Answer in bullet points. Total reply must be under 4 lines."
+        )
+
+        # Start a new chat for this user if not present
+        if user_id not in user_chat_sessions:
+            chat = model.start_chat(history=[
+                {"role": "user", "parts": [{"text": system_instruction}]},
+                {"role": "model", "parts": [{"text": "Understood. I will follow the rules strictly."}]}
+            ])
+            user_chat_sessions[user_id] = chat
+
+        # Send prompt + image
+        chat = user_chat_sessions[user_id]
+        response = chat.send_message([
             {"text": prompt},
             {
                 "inline_data": {
@@ -124,30 +141,11 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
                 }
             }
         ])
-        result = image_response.text.strip()
 
-        # Build a new chat session that includes the image result
-        system_instruction = (
-    "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
-    "ONLY answer agriculture-related questions (farming, crops, soil, fertilizers, irrigation, pests, etc).\n"
-    "DO NOT answer non-agriculture questions. Reply with: 'I can only answer agriculture-related questions.'\n"
-    "NEVER say you're an AI, Gemini, or chatbot.\n"
-    "Keep replies VERY SHORT — no long paragraphs. Use bullet points.\n"
-    "Do not exceed 3–4 lines. No extra explanations.\n"
-    "End every reply with: '🌿 Need more info? Ask your next question.'"
-)
-
-
-        # Create a chat session with image result in context
-        chat = model.start_chat(history=[
-            {"role": "user", "parts": [{"text": prompt}]},
-            {"role": "model", "parts": [{"text": result}]}
-        ])
-        user_chat_sessions[user_id] = chat
+        result = response.text.strip()
 
         # Save to DB
         await save_image_to_db(user_id, file.filename, img_base64, result)
-        await save_chat_to_db(user_id, "[Image Uploaded]", result)
 
         return {
             "result": result or "❌ No analysis result. Try another image.",
