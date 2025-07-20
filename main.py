@@ -54,7 +54,7 @@ def ask_gemini_with_context(user_id: str, question: str) -> str:  # ✅ Changed 
             "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
             "Only answer agriculture-related questions like farming, crops, soil, fertilizers, irrigation, mushroom, fruits, vegetables and pest control.\n"
             "Do NOT answer non-agriculture topics like politics, celebrities, math, science, coding, GK, or English.\n"
-            "If the question is unrelated, respond with: '❌ I can only answer agriculture-related questions.'\n"
+            "If the question is unrelated, respond with: 'I can only answer agriculture-related questions.'\n"
             "Never say you're AI, Gemini, or Google.\n"
             "Keep replies short, clear, and end with: '🌿 Need more info? Ask your next question.'"
         )
@@ -106,13 +106,12 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
 
         # Prepare the prompt and input for the model
         prompt = (
-            "You are a plant doctor. Analyze this plant photo and respond clearly.\n\n"
-            "🌱 Plant: [name if you can identify]\n"
-            "🦠 Disease: [or say Healthy]\n"
-            "⚠️ Issues: bullet list of symptoms\n"
-            "💊 Cure: what farmer should do\n"
-            "🧪 Products: common chemical/organic solutions (only if relevant)\n"
-            "End with: '🌿 Need more info? Ask your next question.'"
+            "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
+            "Analyze the uploaded plant image and reply in this exact format:\n\n"
+            "🌿 Plant Type: [Name the plant if you recognize it, otherwise say 'Uncertain']\n"
+            "🦠 Disease Status: [Healthy / Diseased / Unclear]\n\n"
+            "Then ask:\n"
+            "'Do you want help with treatment, organic remedies, fertilizer advice, or anything else related to this plant?'"
         )
 
         # Use correct format for Google Generative AI SDK
