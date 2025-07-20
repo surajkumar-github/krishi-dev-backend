@@ -93,6 +93,7 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
 
+        # Try loading the image
         try:
             image = Image.open(io.BytesIO(contents)).convert("RGB")
         except Exception:
@@ -104,34 +105,33 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         img_bytes = buffered.getvalue()
         img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        # Prepare system + prompt
-        system_instruction = (
-            "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
-            "Only answer questions about farming, crops, diseases, and organic remedies.\n"
-            "Do NOT answer non-agriculture topics like politics, celebrities, math, science, coding, GK, or English.\n"
-            "NEVER say you're AI or Google. Ignore unrelated questions.\n"
-            "KEEP ALL ANSWERS VERY SHORT (max 4 lines), use bullet points, no extra text.\n"
-            "End with: '🌿 Need more info? Ask your next question.'"
-        )
-
-        prompt = (
-            "Analyze this plant image and reply in this format:\n\n"
-            "🌿 Plant Type: [Tomato, Brinjal, etc]\n"
-            "🦠 Disease Status: [e.g. Healthy, Leaf Curl Virus, Powdery Mildew, Unclear]\n"
-            "✅ Then ask: 'Do you want help with treatment, organic cure, or fertilizer suggestions?'\n"
-            "Answer in bullet points. Total reply must be under 4 lines."
-        )
-
-        # Start a new chat for this user if not present
+        # Create or fetch chat session
         if user_id not in user_chat_sessions:
+            system_instruction = (
+                "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
+                "You help identify plant types, diseases, and treatments from uploaded images.\n"
+                "Keep replies short, practical, max 5 lines.\n"
+                "Use bullet points. Never mention AI or Gemini.\n"
+                "Always end with: '🌿 Need more info? Ask your next question.'"
+            )
             chat = model.start_chat(history=[
                 {"role": "user", "parts": [{"text": system_instruction}]},
-                {"role": "model", "parts": [{"text": "Understood. I will follow the rules strictly."}]}
+                {"role": "model", "parts": [{"text": "Understood. I will follow these rules."}]}
             ])
             user_chat_sessions[user_id] = chat
 
-        # Send prompt + image
         chat = user_chat_sessions[user_id]
+
+        # Prompt to analyze image
+        prompt = (
+            "Analyze this plant image and respond in this format:\n\n"
+            "🌿 Plant Type: [Name if known, or 'Unknown']\n"
+            "🦠 Disease Status: [e.g. Healthy, Leaf Curl Virus, Unclear, etc]\n"
+            "✅ Ask: 'Need help with treatment, organic remedy, or fertilizer advice?'\n\n"
+            "Use simple words and keep reply under 5 lines."
+        )
+
+        # Send message with image context
         response = chat.send_message([
             {"text": prompt},
             {
@@ -144,11 +144,15 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
 
         result = response.text.strip()
 
-        # Save to DB
+        # Fallback if model returns only "." or empty
+        if not result or result == ".":
+            result = "❌ Couldn't analyze the image clearly. Please try another image."
+
+        # Save result in DB
         await save_image_to_db(user_id, file.filename, img_base64, result)
 
         return {
-            "result": result or "❌ No analysis result. Try another image.",
+            "result": result,
             "image_base64": img_base64
         }
 
