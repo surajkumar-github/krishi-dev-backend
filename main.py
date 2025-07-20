@@ -105,11 +105,29 @@ async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
         img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
         # Prepare the prompt and input for the model
+        if user_id not in user_chat_sessions:
+            system_instruction = (
+                "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
+                "Only answer agriculture-related questions like farming, crops, soil, fertilizers, irrigation, mushroom, fruits, vegetables and pest control.\n"
+                "Do NOT answer non-agriculture topics like politics, celebrities, math, science, coding, GK, or English.\n"
+                "If the question is unrelated, respond with: 'I can only answer agriculture-related questions.'\n"
+                "Never say you're AI, Gemini, or Google.\n"
+                "Keep replies short, clear, and end with: '🌿 Need more info? Ask your next question.'"
+            )
+            chat = model.start_chat(history=[
+                {"role": "user", "parts": [{"text": system_instruction}]},
+                {"role": "model", "parts": [{"text": "Understood. I will follow these rules."}]}
+            ])
+            user_chat_sessions[user_id] = chat
+
+        chat = user_chat_sessions[user_id]
+
+        # 🔁 Enhanced prompt with disease name
         prompt = (
             "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
-            "Analyze the uploaded plant image and reply in this exact format:\n\n"
-            "🌿 Plant Type: [Name the plant if you recognize it, otherwise say 'Uncertain']\n"
-            "🦠 Disease Status: [Healthy / Diseased / Unclear]\n\n"
+            "Analyze this plant image and reply in this exact format:\n\n"
+            "🌿 Plant Type: [Name the plant if you recognize it; otherwise say 'Uncertain']\n"
+            "🦠 Disease Status: [If diseased, name the disease like 'Powdery Mildew' or 'Leaf Curl Virus'. If healthy, say 'Healthy'. If unsure, say 'Unclear']\n\n"
             "Then ask:\n"
             "'Do you want help with treatment, organic remedies, fertilizer advice, or anything else related to this plant?'"
         )
