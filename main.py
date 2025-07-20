@@ -51,7 +51,6 @@ def ask_gemini_with_context(user_id: str, question: str) -> str:  # ✅ Changed 
 
     if user_id not in user_chat_sessions:
         system_instruction = (
-    system_instruction = (
     "You are Krishi Dev, an agriculture expert for Indian farmers.\n"
     "ONLY answer agriculture-related questions (farming, crops, soil, fertilizers, irrigation, pests, etc).\n"
     "DO NOT answer non-agriculture questions. Reply with: 'I can only answer agriculture-related questions.'\n"
@@ -61,7 +60,6 @@ def ask_gemini_with_context(user_id: str, question: str) -> str:  # ✅ Changed 
     "End every reply with: '🌿 Need more info? Ask your next question.'"
 )
 
-)
         chat = model.start_chat(history=[
             {"role": "user", "parts": [{"text": system_instruction}]},
             {"role": "model", "parts": [{"text": "Understood. I will follow these rules."}]}
