@@ -88,7 +88,7 @@ async def get_chats(user_id: str):  # ✅ Changed from int to str
     return await get_chats_from_db(user_id)
 
 # === Analyze Plant Image ===
-@@app.post("/analyze-image/")
+@app.post("/analyze-image/")
 async def analyze_image(user_id: str = Form(...), file: UploadFile = File(...)):
     try:
         contents = await file.read()
